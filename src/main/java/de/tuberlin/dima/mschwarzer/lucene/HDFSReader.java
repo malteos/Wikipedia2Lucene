@@ -4,16 +4,19 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.log4j.Logger;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
 
-/**
- * Created by malteschwarzer on 30.11.14.
- */
 public class HDFSReader {
+    /**
+     * Logger for this class.
+     */
+    private static Logger LOG = Logger.getLogger(HDFSReader.class);
+
     String hdfsPath;
     FileSystem fileSystem;
 
@@ -34,6 +37,8 @@ public class HDFSReader {
         conf.set("dfs.datanode.data.dir", "file:///hadoop/hdfs/data/1/hadoop/datanode,file:///hadoop/hdfs/data/2/hadoop/datanode,file:///hadoop/hdfs/data/3/hadoop/datanode,file:///hadoop/hdfs/data/4/hadoop/datanode");
         conf.set("dfs.blocksize", "128m");
 
+        LOG.debug("Connecting to HDFS");
+
         // Init HDFS
         URI uri = URI.create(hdfsPath);
         fileSystem = FileSystem.get(uri, conf, "hadoop");
@@ -44,5 +49,7 @@ public class HDFSReader {
 
     public void close() throws IOException {
         fileSystem.close();
+
+        LOG.debug("HDFS connection closed");
     }
 }
