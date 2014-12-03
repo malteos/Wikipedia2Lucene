@@ -1,6 +1,8 @@
 package de.tuberlin.dima.mschwarzer.lucene;
 
 import org.apache.log4j.Logger;
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.map.ObjectMapper;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
@@ -20,7 +22,7 @@ public class WikiElasticSearch {
     private static Logger LOG = Logger.getLogger(WikiElasticSearch.class);
 
     Client client;
-    String targetClusterName;
+    String targetClusterName = "dima-power-cluster";
     String targetIndex;
     String targetType;
     String targetHost;
@@ -73,7 +75,6 @@ public class WikiElasticSearch {
 
         while ((line = bfr.readLine()) != null) {
 
-
             int tagPosition = line.indexOf("</page>");
 
             if (tagPosition > -1) {
@@ -82,7 +83,24 @@ public class WikiElasticSearch {
                     Matcher m = WikiUtils.getPageMatcher(content);
 
                     if (m.find() && Integer.parseInt(m.group(2)) == 0) {
-                        addDocument(WikiUtils.unescapeEntities(m.group(1)), WikiUtils.unescapeEntities(m.group(4)), i);
+                        // Add document
+                        try {
+                            addDocument(WikiUtils.unescapeEntities(m.group(1)), WikiUtils.unescapeEntities(m.group(4)), i);
+                        } catch(Exception e) {
+                            LOG.error("Failed adding document #" + i + "\n" + e.getMessage());
+                        }
+
+                        // Count documents
+                        i++;
+
+                        if((i%1000) == 0) {
+                            LOG.debug("Importing articles ... " + i);
+                        }
+
+                        if(limit > 0 && i >= limit) {
+                            LOG.warn("Limit reached (" + i + "/" + limit + ")");
+                            break;
+                        }
                     }
                 }
                 content = line.substring(tagPosition);
@@ -90,40 +108,27 @@ public class WikiElasticSearch {
             } else {
                 content += line;
             }
-            //System.out.println(str);
-
-
-            if((i%1000) == 0) {
-                LOG.debug("Importing articles ... " + i);
-            }
-
-            i++;
-
-            if(limit > 0 && i > limit) {
-                LOG.warn("Limit reached (" + i + "/" + limit + ")");
-                break;
-            }
         }
 
         hdfs.close();
     }
 
-    public void addDocument(String title, String text, int i) {
+    public void addDocument(String title, String text, int i) throws Exception {
         // verify json string
-        String json = "{title:\"" + WikiUtils.escapeQuotes(title) + "\",text:\"" +  WikiUtils.escapeQuotes(text) + "\"}";
+        //String json = "{\"title\":\"" + WikiUtils.escapeQuotes(title) + "\",\"text\":\"" +  WikiUtils.escapeQuotes(text) + "\"}";
 
-        try {
-            IndexResponse response = client.prepareIndex(targetIndex, targetType)
-                    .setSource(json)
-                    .setOperationThreaded(false)
-                    .execute()
-                    .actionGet();
 
-            if (!response.isCreated()) {
-                throw new Exception("Cannot create index for: " + json);
-            }
-        } catch(Exception e) {
-            LOG.error("Failed adding document #" + i + "\n" + e.getMessage());
+        ObjectMapper mapper = new ObjectMapper();
+        String json = mapper.writeValueAsString(new Document(title, text));
+
+        IndexResponse response = client.prepareIndex(targetIndex, targetType)
+                .setSource(json)
+                .setOperationThreaded(false)
+                .execute()
+                .actionGet();
+
+        if (!response.isCreated()) {
+            throw new Exception("Cannot create index for: " + json);
         }
 
     }
@@ -143,5 +148,15 @@ public class WikiElasticSearch {
 
     public static String getParameters() {
         return "Parameters: HDFS_PATH ES_NODE [ES_INDEX] [ES_TYPE] [START] [LIMIT] [RESET (y/n)]";
+    }
+
+    class Document {
+        public String title;
+        public String text;
+
+        public Document(String title, String text) {
+            this.title = title;
+            this.text = text;
+        }
     }
 }
