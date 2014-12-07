@@ -1,19 +1,23 @@
 package de.tuberlin.dima.mschwarzer.lucene;
 
 import org.apache.log4j.Logger;
-import org.codehaus.jackson.JsonGenerationException;
 import org.codehaus.jackson.map.ObjectMapper;
-import org.elasticsearch.action.index.IndexResponse;
+import org.elasticsearch.action.bulk.BulkRequestBuilder;
+import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.index.IndexRequestBuilder;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.node.Node;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.util.regex.Matcher;
+
+import static org.elasticsearch.node.NodeBuilder.nodeBuilder;
 
 public class WikiElasticSearch {
     /**
@@ -21,14 +25,21 @@ public class WikiElasticSearch {
      */
     private static Logger LOG = Logger.getLogger(WikiElasticSearch.class);
 
-    Client client;
-    String targetClusterName = "dima-power-cluster";
-    String targetIndex;
-    String targetType;
-    String targetHost;
+    private Client client;
+    private String targetClusterName = "dima-power-cluster";
+    private String targetIndex;
+    private String targetType;
+    private String targetHost;
+    private long timer = 0;
+
+    private static final boolean NODE_CLIENT = false;
+    private static final int REQUESTS_PER_LOG = 1000;
+    private static final int REQUESTS_PER_BULK = 1000;
 
     public final static String DEFAULT_INDEX = "wikipedia";
     public final static String DEFAULT_TYPE = "article";
+
+    private BulkRequestBuilder bulkRequest;
 
     public static void main(String[] args) throws IOException, InterruptedException {
         if(args.length < 2) {
@@ -49,16 +60,27 @@ public class WikiElasticSearch {
         );
     }
 
+    public Client getClient() {
+        if(client == null) {
+            if(NODE_CLIENT) {
+                Node node = nodeBuilder().clusterName(targetClusterName).node();
+                client = node.client();
+            } else {
+                Settings settings = ImmutableSettings.settingsBuilder()
+                        .put("cluster.name", targetClusterName).build();
+
+                client = new TransportClient(settings)
+                        .addTransportAddress(new InetSocketTransportAddress(targetHost, 9300));
+            }
+        }
+
+        return client;
+    }
+
     public WikiElasticSearch(String hdfsPath, String host, String index, String type, int start, int limit, boolean reset) throws IOException, InterruptedException {
         targetIndex = index;
         targetType = type;
         targetHost = host;
-
-        Settings settings = ImmutableSettings.settingsBuilder()
-                .put("cluster.name", targetClusterName).build();
-
-        client = new TransportClient(settings)
-                .addTransportAddress(new InetSocketTransportAddress(targetHost, 9300));
 
         LOG.debug("Connected to ES: " + targetHost + "(" + targetClusterName + ")");
 
@@ -72,6 +94,8 @@ public class WikiElasticSearch {
         int i = 0;
         String line = null;
         String content = "";
+
+        bulkRequest = getClient().prepareBulk();
 
         while ((line = bfr.readLine()) != null) {
 
@@ -93,8 +117,8 @@ public class WikiElasticSearch {
                         // Count documents
                         i++;
 
-                        if((i%1000) == 0) {
-                            LOG.debug("Importing articles ... " + i);
+                        if((i%REQUESTS_PER_LOG) == 0) {
+                            LOG.warn("Importing articles ... " + i);
                         }
 
                         if(limit > 0 && i >= limit) {
@@ -110,6 +134,8 @@ public class WikiElasticSearch {
             }
         }
 
+        sendBulkRequest();
+
         hdfs.close();
     }
 
@@ -121,29 +147,41 @@ public class WikiElasticSearch {
         ObjectMapper mapper = new ObjectMapper();
         String json = mapper.writeValueAsString(new Document(title, text));
 
-        IndexResponse response = client.prepareIndex(targetIndex, targetType)
-                .setSource(json)
-                .setOperationThreaded(false)
-                .execute()
-                .actionGet();
+        IndexRequestBuilder request = getClient().prepareIndex(targetIndex, targetType)
+                .setSource(json);
 
-        if (!response.isCreated()) {
-            throw new Exception("Cannot create index for: " + json);
+        bulkRequest.add(request);
+
+        if((i % REQUESTS_PER_BULK) == 0) {
+            sendBulkRequest();
         }
 
+    }
+
+    public void sendBulkRequest() {
+        timer =  System.currentTimeMillis();
+        BulkResponse bulkResponse = bulkRequest.execute().actionGet();
+
+        LOG.warn("BulkRequest took " + (System.currentTimeMillis() - timer) + "ms ");
+
+        if (bulkResponse.hasFailures()) {
+            LOG.error("Error sending bulk request: " + bulkResponse.buildFailureMessage());
+        }
+
+        bulkRequest = getClient().prepareBulk();
     }
 
     public void deleteDocuments() {
         // delete all documents before importing ...
 
-        LOG.debug("Deleting all docs from index ...");
+        LOG.warn("Deleting all docs from index ...");
 
-        client.prepareDeleteByQuery(targetIndex).
+        getClient().prepareDeleteByQuery(targetIndex).
                 setQuery(QueryBuilders.matchAllQuery()).
                 setTypes(targetType).
                 execute().actionGet();
 
-        LOG.debug("Docs deleted");
+        LOG.warn("Docs deleted");
     }
 
     public static String getParameters() {
