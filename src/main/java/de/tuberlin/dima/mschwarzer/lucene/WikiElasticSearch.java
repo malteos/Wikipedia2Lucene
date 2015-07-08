@@ -3,7 +3,6 @@ package de.tuberlin.dima.mschwarzer.lucene;
 import org.apache.log4j.Logger;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.elasticsearch.action.bulk.BulkRequestBuilder;
-import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequestBuilder;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
@@ -30,11 +29,14 @@ public class WikiElasticSearch {
     private String targetIndex;
     private String targetType;
     private String targetHost;
+
     private long timer = 0;
+    private int documentsSent = 0;
 
     private static final boolean NODE_CLIENT = false;
     private static final int REQUESTS_PER_LOG = 1000;
-    private static final int REQUESTS_PER_BULK = 1000;
+    private static final int REQUESTS_PER_BULK = 250;
+    private static final int WIKI_VALID_NAMESPACE = 0;
 
     public final static String DEFAULT_INDEX = "wikipedia";
     public final static String DEFAULT_TYPE = "article";
@@ -49,8 +51,8 @@ public class WikiElasticSearch {
         }
 
         new WikiElasticSearch(
-                args[0],
-                args[1],
+                args[0], // hdfsPath
+                args[1], // ES host
                 (args.length >= 3 ? args[2] : DEFAULT_INDEX),
                 (args.length >= 4 ? args[3] : DEFAULT_TYPE),
                 (args.length >= 5 ? Integer.valueOf(args[4]) : 0),
@@ -97,45 +99,57 @@ public class WikiElasticSearch {
 
         bulkRequest = getClient().prepareBulk();
 
+        // Read XML dump: Iterate lines
         while ((line = bfr.readLine()) != null) {
 
+            // Look for delimiter
             int tagPosition = line.indexOf("</page>");
 
             if (tagPosition > -1) {
+
                 content += line.substring(0, tagPosition);
                 if(i >= start) {
-                    Matcher m = WikiUtils.getPageMatcher(content);
+                    // search for redirect -> skip if found
+                    if (!WikiUtils.getRedirectMatcher(content).find()) {
 
-                    if (m.find() && Integer.parseInt(m.group(2)) == 0) {
-                        // Add document
-                        try {
-                            addDocument(WikiUtils.unescapeEntities(m.group(1)), WikiUtils.unescapeEntities(m.group(4)), i);
-                        } catch(Exception e) {
-                            LOG.error("Failed adding document #" + i + "\n" + e.getMessage());
+                        // Parse page xml
+                        Matcher m = WikiUtils.getPageMatcher(content);
+
+                        // If found and namespace is valid
+                        if (m.find() && Integer.parseInt(m.group(2)) == WIKI_VALID_NAMESPACE) {
+
+                            // Add document and send bulk request
+                            try {
+                                addDocument(WikiUtils.unescapeEntities(m.group(1)), WikiUtils.unescapeEntities(m.group(4)), i);
+                            } catch (Exception e) {
+                                LOG.error("Failed adding document #" + i + "\n" + e.getMessage());
+                            }
+
+                            // Count documents
+                            i++;
+
+                            if ((i % REQUESTS_PER_LOG) == 0) {
+                                LOG.warn("Importing articles ... " + i);
+                            }
+
+                            if (limit > 0 && i >= limit) {
+                                LOG.warn("Limit reached (" + i + "/" + limit + ")");
+                                break;
+                            }
                         }
-
-                        // Count documents
-                        i++;
-
-                        if((i%REQUESTS_PER_LOG) == 0) {
-                            LOG.warn("Importing articles ... " + i);
-                        }
-
-                        if(limit > 0 && i >= limit) {
-                            LOG.warn("Limit reached (" + i + "/" + limit + ")");
-                            break;
-                        }
+                    } else {
+                        LOG.debug("Skip redirect");
                     }
                 }
-                content = line.substring(tagPosition);
+                content = line.substring(tagPosition) + "\n";
 
             } else {
-                content += line;
+                // Concatenate lines
+                content += line + "\n";
             }
         }
 
         sendBulkRequest();
-
         hdfs.close();
     }
 
@@ -143,6 +157,7 @@ public class WikiElasticSearch {
         // verify json string
         //String json = "{\"title\":\"" + WikiUtils.escapeQuotes(title) + "\",\"text\":\"" +  WikiUtils.escapeQuotes(text) + "\"}";
 
+        LOG.debug("Adding doc: " + title);
 
         ObjectMapper mapper = new ObjectMapper();
         String json = mapper.writeValueAsString(new Document(title, text));
@@ -159,16 +174,26 @@ public class WikiElasticSearch {
     }
 
     public void sendBulkRequest() {
-        timer =  System.currentTimeMillis();
-        BulkResponse bulkResponse = bulkRequest.execute().actionGet();
 
-        LOG.warn("BulkRequest took " + (System.currentTimeMillis() - timer) + "ms ");
-
-        if (bulkResponse.hasFailures()) {
-            LOG.error("Error sending bulk request: " + bulkResponse.buildFailureMessage());
-        }
-
-        bulkRequest = getClient().prepareBulk();
+//        long timerStart = System.currentTimeMillis();
+//
+//        if(bulkRequest.numberOfActions() < 1) {
+//            LOG.warn("Empty bulk request. Skip..");
+//            return;
+//        }
+//
+//        BulkResponse bulkResponse = bulkRequest.execute().actionGet();
+//        long timerEnd = System.currentTimeMillis();
+//        int timeReq = (int) (timerEnd - timerStart);
+//        double docsPerSec = REQUESTS_PER_BULK / timeReq * 1000;
+//
+//        LOG.warn("BulkRequest took " + (timeReq) + "ms | " + docsPerSec +" docs/sec");
+//
+//        if (bulkResponse.hasFailures()) {
+//            LOG.error("Error sending bulk request: " + bulkResponse.buildFailureMessage());
+//        }
+//
+//        bulkRequest = getClient().prepareBulk();
     }
 
     public void deleteDocuments() {

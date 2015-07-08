@@ -42,7 +42,7 @@ public class ResultCollector {
     private String targetIndex;
     private String targetType;
     private String targetHost;
-    private int resultSize = 10;
+    private int resultSize = 20;
     private static final boolean NODE_CLIENT = false;
 
     public class MLTResult {
@@ -55,8 +55,18 @@ public class ResultCollector {
         }
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
+        if(args.length < 5) {
+            System.err.println("Arguments missing: <clustername> <host> <index> <type> <inputfile> <outputfile>");
+            System.exit(1);
+        }
 
+        new ResultCollector()
+                .setClusterName(args[0])
+                .setHost(args[1])
+                .setIndex(args[2])
+                .setType(args[3])
+                .execute(args[4], args[5]);
     }
 
     public void execute(String inputFilename, String outputFilename) throws IOException {
@@ -113,7 +123,7 @@ public class ResultCollector {
             .moreLikeThis(new MoreLikeThisRequest(targetIndex)
                             .type(targetType)
                             .id(docId)
-                            .fields("title", "text")
+                            .fields("text") // ignore title field?
                             .minTermFreq(1)
                             .minDocFreq(1)
                             .searchSize(resultSize)
