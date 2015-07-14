@@ -42,6 +42,12 @@ public class ResultCollector {
     private String targetIndex;
     private String targetType;
     private String targetHost;
+    private String outputFilename = null;
+    private String inputFilename = null;
+    private FileWriter outputFileWriter = null;
+    private int scrollStart = 0;
+    private int scrollEnd = -1;
+
     private int resultSize = 20;
     private static final boolean NODE_CLIENT = false;
 
@@ -57,46 +63,104 @@ public class ResultCollector {
 
     public static void main(String[] args) throws IOException {
         if(args.length < 5) {
-            System.err.println("Arguments missing: <clustername> <host> <index> <type> <inputfile> <outputfile>");
+            System.err.println("Arguments missing: <clustername> <host> <index> <type> <outputfile> <docfilter> <scroll-start> <scroll-limit>");
             System.exit(1);
         }
 
-        new ResultCollector()
+        ResultCollector rc = new ResultCollector()
                 .setClusterName(args[0])
                 .setHost(args[1])
                 .setIndex(args[2])
                 .setType(args[3])
-                .execute(args[4], args[5]);
+                .setOutputFilename(args[4]);
+
+
+
+        if(args.length > 5)
+            rc.setInputFilename(args[5]);
+
+        if(args.length > 6)
+            rc.setScrollStart(Integer.valueOf(args[6]));
+
+        if(args.length > 7)
+            rc.setScrollEnd(Integer.valueOf(args[7]));
+
+        rc.execute();
     }
 
-    public void execute(String inputFilename, String outputFilename) throws IOException {
 
-        String articleName = null;
-        FileWriter writer = new FileWriter(outputFilename);
-        BufferedReader bfr = new BufferedReader(new FileReader(inputFilename));
+    public void execute() throws IOException {
 
-        LOG.warn("Reading from " + inputFilename);
+        LOG.warn("Executing...");
 
-        while ((articleName = bfr.readLine()) != null) {
+        if(inputFilename != null) {
+            // Documents from input
+            String articleName = null;
+            BufferedReader bfr = new BufferedReader(new FileReader(inputFilename));
 
-            String docId = getDocumentId(articleName);
+            LOG.warn("Reading from " + inputFilename);
 
-            if(docId == null) {
-                LOG.error("No document matching article name: " + articleName);
-            } else {
+            while ((articleName = bfr.readLine()) != null) {
+                String docId = getDocumentId(articleName);
 
-                for(MLTResult result : getMoreLikeThisResults(docId)) {
-                    writer.append(articleName + csvFieldDelimitter);
-                    writer.append(result.title + csvFieldDelimitter);
-                    writer.append(result.score + csvRowDelimitter);
+                if (docId == null) {
+                    LOG.error("No document matching article name: " + articleName);
+                    continue;
                 }
-
+                collectResults(articleName, docId);
             }
+        } else {
+            // All documents
+            int scrollSize = 100;
+            SearchResponse response = null;
+            int scroll = 0;
+            while (response == null || response.getHits().hits().length != 0) {
+                if(scroll >= scrollStart) {
+                    response = getClient().prepareSearch(targetIndex)
+                            .setTypes(targetType)
+                            .setQuery(QueryBuilders.matchAllQuery())
+                            .setSize(scrollSize)
+                            .setFrom(scroll * scrollSize)
+                            .addFields("title")
+                            .execute()
+                            .actionGet();
+                    for (SearchHit hit : response.getHits()) {
+                        collectResults((String) hit.field("title").getValue(), hit.getId());
+                    }
+                    LOG.warn("Search scroll #" + scroll + " with " + response.getHits().hits().length + " hits");
+                } else {
+                    LOG.debug("Skip search scroll #" + scroll + " until #" + scrollStart);
+                }
+                scroll++;
 
-            writer.flush();
+                if(scrollEnd > 0 && scroll >= scrollEnd) {
+                    LOG.warn("Scroll end reached at #" + scrollEnd);
+                    break;
+                }
+            }
         }
 
-        writer.close();
+
+        getOutputFileWriter().close();
+    }
+
+    public void collectResults(String articleName, String docId) throws IOException {
+
+        for(MLTResult result : getMoreLikeThisResults(docId)) {
+            getOutputFileWriter().append(articleName + csvFieldDelimitter);
+            getOutputFileWriter().append(result.title + csvFieldDelimitter);
+            getOutputFileWriter().append(result.score + csvRowDelimitter);
+        }
+
+        getOutputFileWriter().flush();
+    }
+
+    public FileWriter getOutputFileWriter() throws IOException {
+        if(outputFileWriter == null) {
+            outputFileWriter = new FileWriter(outputFilename);
+        }
+
+        return outputFileWriter;
     }
 
     private String getDocumentId(String title) {
@@ -161,6 +225,18 @@ public class ResultCollector {
         return client;
     }
 
+    public ResultCollector setInputFilename(String filename) {
+        if(!filename.equalsIgnoreCase("nofilter"))
+            inputFilename = filename;
+
+        return this;
+    }
+
+    public ResultCollector setOutputFilename(String filename) {
+        outputFilename = filename;
+        return this;
+    }
+
     public ResultCollector setIndex(String index) {
         targetIndex = index;
         return this;
@@ -177,6 +253,16 @@ public class ResultCollector {
     }
     public ResultCollector setClusterName(String clusterName) {
         targetClusterName = clusterName;
+        return this;
+    }
+
+    public ResultCollector setScrollStart(int start) {
+        scrollStart = start;
+        return this;
+    }
+
+    public ResultCollector setScrollEnd(int end) {
+        scrollEnd = end;
         return this;
     }
 }

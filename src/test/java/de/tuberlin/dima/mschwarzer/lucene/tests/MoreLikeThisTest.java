@@ -13,10 +13,31 @@ public class MoreLikeThisTest {
         String out = getClass().getClassLoader().getResources("test.txt").nextElement().getPath();
 
         new ResultCollector()
-                .setClusterName(null)
+                .setClusterName("dima-power-cluster")
                 .setHost("localhost")
                 .setIndex("wikipedia")
                 .setType("article")
-                .execute(csv, out);
+                .setOutputFilename(out)
+                        .setScrollEnd(2)
+                                .setScrollStart(1)
+//                .setInputFilename(csv)
+                .execute();
+    }
+
+    @Test
+    public void LocalMainTest() throws IOException {
+
+        String csv = getClass().getClassLoader().getResources("articlenames.txt").nextElement().getPath();
+        String out = getClass().getClassLoader().getResources("test.txt").nextElement().getPath();
+
+        ResultCollector.main(new String[]{
+                "dima-power-cluster",
+                "localhost",
+                "wikipedia",
+                "article",
+                out,
+                "nofilter",
+                "0",
+                "1"});
     }
 }

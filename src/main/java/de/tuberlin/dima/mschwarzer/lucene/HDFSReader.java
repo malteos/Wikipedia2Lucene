@@ -22,10 +22,11 @@ public class HDFSReader {
     public HDFSReader(String hdfsPath) {
         this.hdfsPath = hdfsPath;
 
-        if(!hdfsPath.substring(0, 8).equals("hdfs://")) {
-            System.out.println("Use local reader");
-            localFSReader = true;
-        }
+        // TODO: Not working
+//        if(!hdfsPath.substring(0, 8).equals("hdfs://")) {
+//            System.out.println("Use local reader");
+//            localFSReader = true;
+//        }
 
     }
     public BufferedReader getReader() throws IOException, InterruptedException {

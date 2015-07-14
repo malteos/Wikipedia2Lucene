@@ -3,6 +3,7 @@ package de.tuberlin.dima.mschwarzer.lucene;
 import org.apache.log4j.Logger;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.elasticsearch.action.bulk.BulkRequestBuilder;
+import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequestBuilder;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
@@ -175,25 +176,25 @@ public class WikiElasticSearch {
 
     public void sendBulkRequest() {
 
-//        long timerStart = System.currentTimeMillis();
-//
-//        if(bulkRequest.numberOfActions() < 1) {
-//            LOG.warn("Empty bulk request. Skip..");
-//            return;
-//        }
-//
-//        BulkResponse bulkResponse = bulkRequest.execute().actionGet();
-//        long timerEnd = System.currentTimeMillis();
-//        int timeReq = (int) (timerEnd - timerStart);
-//        double docsPerSec = REQUESTS_PER_BULK / timeReq * 1000;
-//
-//        LOG.warn("BulkRequest took " + (timeReq) + "ms | " + docsPerSec +" docs/sec");
-//
-//        if (bulkResponse.hasFailures()) {
-//            LOG.error("Error sending bulk request: " + bulkResponse.buildFailureMessage());
-//        }
-//
-//        bulkRequest = getClient().prepareBulk();
+        long timerStart = System.currentTimeMillis();
+
+        if(bulkRequest.numberOfActions() < 1) {
+            LOG.warn("Empty bulk request. Skip..");
+            return;
+        }
+
+        BulkResponse bulkResponse = bulkRequest.execute().actionGet();
+        long timerEnd = System.currentTimeMillis();
+        int timeReq = (int) (timerEnd - timerStart);
+        double docsPerSec = REQUESTS_PER_BULK / timeReq * 1000;
+
+        LOG.warn("BulkRequest took " + (timeReq) + "ms | " + docsPerSec +" docs/sec");
+
+        if (bulkResponse.hasFailures()) {
+            LOG.error("Error sending bulk request: " + bulkResponse.buildFailureMessage());
+        }
+
+        bulkRequest = getClient().prepareBulk();
     }
 
     public void deleteDocuments() {
