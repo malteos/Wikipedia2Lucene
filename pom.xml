@@ -17,7 +17,7 @@
             <version>2.2.0</version>
         </dependency>
 
-
+        <!--
         <dependency>
             <groupId>org.apache.lucene</groupId>
             <artifactId>lucene-core</artifactId>
@@ -33,11 +33,12 @@
             <artifactId>lucene-analyzers-common</artifactId>
             <version>4.0.0</version>
         </dependency>
+        -->
 
         <dependency>
             <groupId>org.elasticsearch</groupId>
             <artifactId>elasticsearch</artifactId>
-            <version>1.4.0.Beta1</version>
+            <version>1.4.1</version>
         </dependency>
 
         <dependency>
