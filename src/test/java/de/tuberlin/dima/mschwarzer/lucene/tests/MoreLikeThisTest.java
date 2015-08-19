@@ -38,6 +38,7 @@ public class MoreLikeThisTest {
                 out,
                 "nofilter",
                 "0",
-                "1"});
+                "1",
+        "y"});
     }
 }

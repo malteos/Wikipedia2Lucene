@@ -27,11 +27,23 @@ import static org.elasticsearch.node.NodeBuilder.nodeBuilder;
  * Input format:
  * article
  *
- * Output format:
- * article | mlt result title | mlt result score
+ * Output formats:
+ *
+ * I) MultipleLines
+ *
+ * article | mlt result A title | mlt result A score
+ * article | mlt result B title | mlt result B score
+ *
+ * II) SingleLine
+ * article | mlt result A title | mlt result A score | mlt result B title | mlt result B score
  *
  */
 public class ResultCollector {
+    enum OutputFormat {
+        MultipleLines,
+        SingleLine
+    }
+
     private static char listDelimitter = ',';
     private static char csvFieldDelimitter = '|';
     private static String csvRowDelimitter = "\n";
@@ -48,6 +60,8 @@ public class ResultCollector {
     private int scrollStart = 0;
     private int scrollEnd = -1;
 
+    private OutputFormat outputFormat = OutputFormat.MultipleLines;
+
     private int resultSize = 20;
     private static final boolean NODE_CLIENT = false;
 
@@ -63,7 +77,7 @@ public class ResultCollector {
 
     public static void main(String[] args) throws IOException {
         if(args.length < 5) {
-            System.err.println("Arguments missing: <clustername> <host> <index> <type> <outputfile> <docfilter> <scroll-start> <scroll-limit>");
+            System.err.println("Arguments missing: <clustername> <host> <index> <type> <outputfile> <docfilter> <scroll-start> <scroll-limit> <single-line-outputformat>");
             System.exit(1);
         }
 
@@ -85,6 +99,10 @@ public class ResultCollector {
         if(args.length > 7)
             rc.setScrollEnd(Integer.valueOf(args[7]));
 
+        if(args.length > 8 && args[8].equalsIgnoreCase("y"))
+            rc.enableSingleLineOutputFormat();
+
+
         rc.execute();
     }
 
@@ -99,15 +117,30 @@ public class ResultCollector {
             BufferedReader bfr = new BufferedReader(new FileReader(inputFilename));
 
             LOG.warn("Reading from " + inputFilename);
-
+            int scroll = 0;
             while ((articleName = bfr.readLine()) != null) {
-                String docId = getDocumentId(articleName);
+                if(scroll >= scrollStart) {
+                    String docId = getDocumentId(articleName);
 
-                if (docId == null) {
-                    LOG.error("No document matching article name: " + articleName);
-                    continue;
+                    if (docId == null) {
+                        LOG.error("No document matching article name: " + articleName);
+                    } else {
+                        collectResults(articleName, docId);
+                    }
+
+                    if((scroll % 1000) == 0) {
+                        LOG.warn("Scroll " + scroll);
+                    }
+                } else {
+                    LOG.debug("Skip search scroll #" + scroll + " until #" + scrollStart);
                 }
-                collectResults(articleName, docId);
+
+                scroll++;
+
+                if(scrollEnd > 0 && scroll >= scrollEnd) {
+                    LOG.warn("Scroll end reached at #" + scrollEnd);
+                    break;
+                }
             }
         } else {
             // All documents
@@ -140,16 +173,28 @@ public class ResultCollector {
             }
         }
 
-
         getOutputFileWriter().close();
     }
 
     public void collectResults(String articleName, String docId) throws IOException {
 
-        for(MLTResult result : getMoreLikeThisResults(docId)) {
-            getOutputFileWriter().append(articleName + csvFieldDelimitter);
-            getOutputFileWriter().append(result.title + csvFieldDelimitter);
-            getOutputFileWriter().append(result.score + csvRowDelimitter);
+        if(outputFormat.equals(OutputFormat.MultipleLines)) {
+            for (MLTResult result : getMoreLikeThisResults(docId)) {
+                getOutputFileWriter().append(articleName + csvFieldDelimitter);
+                getOutputFileWriter().append(result.title + csvFieldDelimitter);
+                getOutputFileWriter().append(result.score + csvRowDelimitter);
+            }
+        } else if(outputFormat.equals(OutputFormat.SingleLine)) {
+            getOutputFileWriter().append(articleName);
+
+            for (MLTResult result : getMoreLikeThisResults(docId)) {
+                getOutputFileWriter().append(csvFieldDelimitter + result.title + csvFieldDelimitter + result.score);
+            }
+
+            getOutputFileWriter().append(csvRowDelimitter);
+
+        } else {
+            LOG.error("Invalid output format.");
         }
 
         getOutputFileWriter().flush();
@@ -265,4 +310,16 @@ public class ResultCollector {
         scrollEnd = end;
         return this;
     }
+
+    public ResultCollector enableSingleLineOutputFormat() {
+        outputFormat = OutputFormat.SingleLine;
+        return this;
+    }
+
+    public ResultCollector enableMultipleLinesOutputFormat() {
+        outputFormat = OutputFormat.MultipleLines;
+        return this;
+    }
+
+
 }

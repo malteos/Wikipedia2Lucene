@@ -1,0 +1,95 @@
+Elasticsearch - Useful tips
+===========================
+
+Set replica
+
+
+
+Scroll
+
+curl -XGET 'localhost:9200/wikipedia/_search?search_type=scan&scroll=10m&size=1000' -d '
+{
+    "query" : {
+        "match_all" : {}
+    }
+}
+'
+
+curl -XGET 'localhost:9200/wikipedia/article/_search?pretty' -d '{
+    "query" : {
+        "match_all": {}
+    },
+    "from" : 0,
+    "size" : 1
+}
+'
+
+curl -XGET 'localhost:9200/wikipedia/article/_search?pretty' -d '{"query":{"title": ""}}'
+curl -XGET 'localhost:9200/wikipedia/article/_search' -d '{
+    "term": {
+        "title": "Veerhuis"
+        }
+}'
+
+scroll_id
+c2Nhbjs1OzI6MUxBYVY0dUVUb1c1OTJLVDQwWlQwUTsxOkFjdlBWWk1GVE9hWWdaa1RDbFdYTmc7MTpNZ1g2TWQyOFE0T3l0S3hBREZ6WnJnOzI6QWN2UFZaTUZUT2FZZ1prVENsV1hOZzsxOjFMQWFWNHVFVG9XNTkyS1Q0MFpUMFE7MTt0b3RhbF9oaXRzOjQ1NzQzMzk7
+
+2015-07-11 21:23:29,382 [main           ] WARN  e.morelikethis.ResultCollector 118 - Search scroll #81
+2015-07-11 21:31:07,756 [main           ] WARN  e.morelikethis.ResultCollector 118 - Search scroll #82
+##
+[2015-07-13 21:35:05,742] [main] WARN  ResultCollector                131  - Search scroll #978 with 100 hits
+[2015-07-13 21:37:03,921] [main] WARN  ResultCollector                131  - Search scroll #979 with 100 hits
+
+java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_820.csv nofilter 980 1000
+
+500 pro slot
+
+1000 MLTs pro Minute
+60000 pro Stunde
+
+###
+Time required for MLT all documents
+- docs              4 574 339
+- See also docs       679 309
+- current rate      500/m
+                    3000/h
+- finished          160 000
+
+600 each
+
+TODO
+
+nohup java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_1600.csv nofilter 1600 2200 &> t1.out &
+nohup java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_2200.csv nofilter 2200 2800 &> t2.out &
+nohup java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_2800.csv nofilter 2800 3400 &> t3.out &
+nohup java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_3400.csv nofilter 3400 4000 &> t4.out &
+nohup java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_4000.csv nofilter 4000 4600 &> t5.out &
+nohup java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_4600.csv nofilter 4600 5200 &> t6.out &
+nohup java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_5200.csv nofilter 5200 5900 &> t7.out &
+nohup java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_5900.csv nofilter 5900 6600 &> t8.out &
+nohup java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_6600.csv nofilter 6600 7300 &> t9.out &
+nohup java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_7300.csv nofilter 7300 8000 &> t10.out &
+nohup java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_8000.csv nofilter 8000 8700 &> t11.out &
+nohup java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_8700.csv nofilter 8700 9400 &> t12.out &
+nohup java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_9400.csv nofilter 9400 10000 &> t13.out &
+nohup java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_10000.csv nofilter 10000 10700 &> t14.out &
+
+
+java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_.csv nofilter 1400 1500
+java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_1400.csv nofilter 1400 1500
+java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_1400.csv nofilter 1400 1500
+
+
+nohup sh looptest.sh &> nn.out &
+nohup sh looptest.sh &> nn.out &
+nohup sh looptest.sh &> nn.out &
+
+
+####
+# filter names
+# - unique: 854 651
+# - 3 225 355
+# - 3225355
+####
+
+nohup java -cp wiki.jar de.tuberlin.dima.mschwarzer.lucene.morelikethis.ResultCollector dima-power-cluster ibm-power-1.dima.tu-berlin.de wikipedia article mlt_results_full.csv /home/mschwarzer/filter_names_unique &> full.out &
